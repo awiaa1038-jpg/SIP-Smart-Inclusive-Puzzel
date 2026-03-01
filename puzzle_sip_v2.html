@@ -632,7 +632,10 @@ const POST_QS = [
 // ═══════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════
+// global state
 let started=false, readIdx=0, placed={}, gameScore=0;
+// fuzzy match threshold (0-1) used for interpreting voice answers; lower makes it more permissive
+const FUZZY_THRESHOLD = 0.75; // adjust if recognition too strict or too loose
 let muted=false, micOn=false;
 let curHighlight=null;
 let recognition=null, recActive=false;
@@ -695,7 +698,8 @@ function setupRecognition(){
   recognition.lang='id-ID';
   recognition.continuous=true;
   recognition.interimResults=true;
-  recognition.maxAlternatives=1;
+  // improve matching by returning a few alternatives
+  recognition.maxAlternatives=3;
   recognition.onresult=(e)=>{
     let final='',interim='';
     for(let i=e.resultIndex;i<e.results.length;i++){
@@ -704,6 +708,13 @@ function setupRecognition(){
     }
     const disp=final||interim;
     document.getElementById('voiceTranscript').textContent=disp;
+    // If interim contains clear short commands, act early for responsiveness
+    if(interim){
+      const iLow=interim.trim().toLowerCase();
+      if(iLow.length>2 && (iLow.includes('mulai')||iLow.includes('start')||iLow.includes('selanjutnya')||iLow.includes('next')||iLow.includes('pasang')||iLow.includes('reset')||iLow.includes('buka soal')||iLow.includes('quiz'))){
+        try{handleVoiceInput(iLow);}catch(e){}
+      }
+    }
     if(final) handleVoiceInput(final.trim().toLowerCase());
   };
   recognition.onerror=(e)=>{
@@ -716,8 +727,9 @@ function setupRecognition(){
   };
   recognition.onend=()=>{
     synth.cancel();
+    // restart recognition quickly for better responsiveness
     if(micOn&&recActive){
-      try{recognition.start();}catch(e){}
+      setTimeout(()=>{try{recognition.start();}catch(e){}},250);
     }
   };
   return true;
@@ -820,17 +832,17 @@ function handleVoiceInput(text){
 function handleConversation(text){
   // Simple AI conversation
   let resp='';
-  if(text.includes('halo')||text.includes('hai')||text.includes('hello'))
+  if(text.includes('halo')||text.includes('hai')||text.includes('hello')||text.includes('selamat pagi')||text.includes('selamat siang')||text.includes('selamat sore')||text.includes('assalamualaikum'))
     resp='Halo! Aku SIPA, AI tutor matematika kamu! Siap belajar?';
-  else if(text.includes('sipa')||text.includes('namamu')||text.includes('siapa kamu'))
-    resp='Aku SIPA, Smart Inclusive Puzzle AI! Aku disini untuk membantu kamu belajar matematika sambil main puzzle!';
-  else if(text.includes('bagus')||text.includes('hebat')||text.includes('pintar'))
+  else if(text.includes('sipa')||text.includes('namamu')||text.includes('siapa kamu')||text.includes('apa namamu'))
+    resp='Aku SIPA, Smart Inclusive Puzzle AI! Aku di sini untuk membantu kamu belajar matematika sambil main puzzle!';
+  else if(text.includes('bagus')||text.includes('hebat')||text.includes('pintar')||text.includes('keren'))
     resp='Terima kasih! Kamu juga hebat! Terus semangat belajar ya!';
-  else if(text.includes('susah')||text.includes('sulit'))
-    resp='Jangan menyerah! Matematika jadi mudah kalau sering latihan. Ayo kita coba bersama!';
-  else if(text.includes('berapa skor')||text.includes('nilai'))
+  else if(text.includes('susah')||text.includes('sulit')||text.includes('bingung'))
+    resp='Jangan menyerah! Matematika jadi lebih mudah kalau sering latihan. Ayo kita coba bersama!';
+  else if(text.includes('berapa skor')||text.includes('nilai')||text.includes('skor saya'))
     resp=`Skor kamu sekarang ${gameScore} poin. Keren! Terus semangat!`;
-  else if(text.includes('bantuan')||text.includes('bantu')||text.includes('help'))
+  else if(text.includes('bantuan')||text.includes('bantu')||text.includes('help')||text.includes('petunjuk')||text.includes('cara'))
     resp='Aku bisa bantu! Bilang "mulai" untuk mulai game, "selanjutnya" untuk soal berikutnya, atau "pasang" untuk menaruh kepingan!';
   else return; // don't respond to random sounds
   
@@ -1078,16 +1090,62 @@ function handlePieceVoiceAnswer(text){
   if(!p) return;
   const norm=text.replace(/\./g,'').replace(/,/g,'').toLowerCase();
   const normAns=p.a.toString().toLowerCase().replace(/[^0-9a-z]/g,'');
-  const normNorm=norm.replace(/[^0-9a-z]/g,'');
-  if(normNorm.includes(normAns)||normAns===normNorm){
+  let normNorm=norm.replace(/[^0-9a-z ]/g,'').trim();
+  // try to convert Indonesian number words into digits (supports puluh, belas, ratus)
+  function wordsToNumber(s){
+    if(!s) return NaN;
+    s=s.toLowerCase().replace(/[^a-z0-9 ]/g,'').trim();
+    const small={"nol":0,"satu":1,"dua":2,"tiga":3,"empat":4,"lima":5,"enam":6,"tujuh":7,"delapan":8,"sembilan":9};
+    const tokens=s.split(/\s+/);
+    let total=0; let current=0;
+    for(let i=0;i<tokens.length;i++){
+      const t=tokens[i];
+      if(t==='seribu'){ current+=1000; }
+      else if(t==='seratus'){ current+=100; }
+      else if(t==='ratus'){ current = (current||1)*100; }
+      else if(t==='puluh'){ current = (current||1)*10; }
+      else if(t==='belas'){ current = (current||0)+10; }
+      else if(small[t]!==undefined){ current += small[t]; }
+      else if(!isNaN(Number(t))){ current += Number(t); }
+      else {
+        // unknown token, skip
+      }
+    }
+    total += current;
+    return total||NaN;
+  }
+  const maybeNum=wordsToNumber(normNorm.split(' ').filter(Boolean).join(' '));
+  if(!isNaN(maybeNum)) normNorm = String(maybeNum);
+  else normNorm = normNorm.replace(/ /g,'');
+
+  // fuzzy numeric/textual match (allow small differences)
+  function clean(s){return s.toLowerCase().replace(/[^0-9a-z]/g,'');}
+  function levenshtein(a,b){
+    if(a===b) return 0; const m=a.length,n=b.length; if(m===0) return n; if(n===0) return m;
+    const dp=Array.from({length:m+1},()=>Array(n+1).fill(0));
+    for(let i=0;i<=m;i++)dp[i][0]=i; for(let j=0;j<=n;j++)dp[0][j]=j;
+    for(let i=1;i<=m;i++){
+      for(let j=1;j<=n;j++){
+        const cost=a[i-1]===b[j-1]?0:1;
+        dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+cost);
+      }
+    }
+    return dp[m][n];
+  }
+  function similar(a,b){const A=clean(a),B=clean(b);const d=levenshtein(A,B);const L=Math.max(A.length,B.length)||1;return 1-d/L;}
+
+  if(similar(normNorm,normAns)>=FUZZY_THRESHOLD || normNorm.includes(normAns) || normAns===normNorm){
     expectingPieceAnswer=null;
-    setMsg('✅ Benar! Pasang keping.');
+    // speak immediate positive feedback
+    say('✅ Benar! Pasang keping.', null);
     playBeep(1000,0.08,'triangle');
     curHighlight=pid;
     const pc=document.getElementById(`pc-${pid}`);
     if(pc) pc.classList.add('current');
     toast('✅ Jawaban benar!',1500);
   } else {
+    // speak immediate negative feedback and prompt retry
+    say('❌ Jawaban salah, coba ulangi.', null);
     setMsg('❌ Ulang, coba lagi.');
     playBeep(300,0.06,'sawtooth');
     toast('❌ Salah, ulang.',1500);
@@ -1098,14 +1156,50 @@ function handleQuizVoiceAnswer(text){
   if(currentQuizQ<0||currentQuizQ>=POST_QS.length)return;
   const q=POST_QS[currentQuizQ];
   if(quizAnswered[q.n])return;
-  // Match answer
-  const norm=text.replace(/\./g,'').replace(/,/g,'').toLowerCase();
+  // Match answer with fuzzy matching and support single-letter answers
+  const norm=text.replace(/\./g,'').replace(/,/g,'').toLowerCase().trim();
   let matched=null;
+  // handle single-letter answers (A/B/C/D)
+  const letterMap={'a':0,'b':1,'c':2,'d':3};
+  const tTrim=norm;
+  if(tTrim.length===1 && letterMap[tTrim]!==undefined){
+    const idx=letterMap[tTrim];
+    if(q.opts[idx]) matched=q.opts[idx];
+  }
+  // prepare fuzzy helpers
+  function clean(s){return s.toLowerCase().replace(/[^0-9a-z]/g,'');}
+  function levenshtein(a,b){
+    if(a===b) return 0;
+    const m=a.length,n=b.length; if(m===0) return n; if(n===0) return m;
+    const dp=Array.from({length:m+1},()=>Array(n+1).fill(0));
+    for(let i=0;i<=m;i++)dp[i][0]=i; for(let j=0;j<=n;j++)dp[0][j]=j;
+    for(let i=1;i<=m;i++){
+      for(let j=1;j<=n;j++){
+        const cost=a[i-1]===b[j-1]?0:1;
+        dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+cost);
+      }
+    }
+    return dp[m][n];
+  }
+  function similarity(a,b){
+    const A=clean(a),B=clean(b); const d=levenshtein(A,B); const L=Math.max(A.length,B.length)||1; return 1 - d/L;
+  }
+
+  // try exact / include matches first
   q.opts.forEach(opt=>{
-    const normOpt=opt.toLowerCase().replace(/[^0-9a-z]/g,'');
-    const normNorm=norm.replace(/[^0-9a-z]/g,'');
+    const normOpt=clean(opt);
+    const normNorm=clean(norm);
     if(normNorm.includes(normOpt)||normOpt===normNorm) matched=opt;
   });
+  // if not exact, try fuzzy similarity threshold
+  if(!matched){
+    let best=null,bestScore=0;
+    q.opts.forEach(opt=>{
+      const s=similarity(opt,norm);
+      if(s>bestScore){bestScore=s;best=opt;}
+    });
+    if(bestScore>=FUZZY_THRESHOLD) matched=best;
+  }
   if(matched){
     document.getElementById(`qvi-${q.n}`).classList.remove('show');
     const btn=document.querySelector(`#qc-${q.n} .opt-btn[onclick*="${matched}"]`);
@@ -1129,12 +1223,16 @@ function answerQ(qNum, answer, btn){
     btn.classList.add('ok');card.classList.add('ok');
     fb.className='q-fb show ok';fb.textContent=`✅ Benar! ${q.exp}`;
     correctCount++;gameScore+=15;updateUI();
+    // immediate audio & speech feedback for correct
     playBeep(1000,0.08,'triangle');
+    say('✅ Benar!', null);
     setTimeout(()=>advanceQuizQ(qNum),600);
   } else {
     btn.classList.add('fail');card.classList.add('fail');
     fb.className='q-fb show fail';fb.textContent=`❌ Jawaban: ${q.ans}`;
+    // immediate audio & speech feedback for wrong
     playBeep(300,0.06,'sawtooth');
+    say('❌ Jawaban salah, coba ulangi.', null);
     setTimeout(()=>advanceQuizQ(qNum),1000);
   }
   document.getElementById(`vab-${qNum}`).style.display='none';
