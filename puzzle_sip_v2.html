@@ -895,7 +895,7 @@ function readNext(){
   const msg=`Kepingan nomor ${pid}. Soal: ${p.hint} sama dengan berapa?`;
   // set expecting answer for this piece; when detected correct, we will prompt to place
   expectingPieceAnswer=pid;
-  setMsg(msg);
+  say(msg, null);
   if(readIdx>=READ_ORDER.length){
     setTimeout(()=>document.getElementById('nextBtn').disabled=true,500);
   }
@@ -1005,14 +1005,14 @@ function handlePieceVoiceAnswer(text){
   const normNorm=norm.replace(/[^0-9a-z]/g,'');
   if(normNorm.includes(normAns)||normAns===normNorm){
     expectingPieceAnswer=null;
-    setMsg(`Jawaban untuk kepingan ${pid} benar — sekarang pasang kepingan nomor ${pid} ke posisi ${pid}.`);
+    say(`Jawaban untuk kepingan ${pid} benar — sekarang pasang kepingan nomor ${pid} ke posisi ${pid}.`, null);
     playBeep(1000,0.08,'triangle');
     curHighlight=pid;
     const pc=document.getElementById(`pc-${pid}`);
     if(pc) pc.classList.add('current');
     toast('✅ Jawaban benar! Pasang keping sekarang.',2000);
   } else {
-    setMsg('Jawaban belum tepat, coba lagi.');
+    say('Jawaban belum tepat, coba lagi.', null);
     playBeep(300,0.06,'sawtooth');
   }
 }
