@@ -565,6 +565,7 @@ let recognition=null, recActive=false;
 let currentQuizQ=-1; // index of quiz q awaiting voice answer
 let quizAnswered={}; // {qNum: bool}
 let correctCount=0;
+let expectingPieceAnswer=null; // id of piece currently awaiting voice answer
 const synth=window.speechSynthesis;
 
 // ═══════════════════════════════════════════
@@ -589,7 +590,7 @@ function speak(txt, onDone){
   if(muted){if(onDone)onDone();return;}
   synth.cancel();
   const u=new SpeechSynthesisUtterance(txt);
-  u.lang='id-ID';u.rate=0.88;u.pitch=1.05;
+  u.lang='id-ID';u.rate=1.05;u.pitch=1.05;
   const voices=synth.getVoices();
   const idv=voices.find(v=>v.lang.startsWith('id'));
   if(idv)u.voice=idv;
@@ -706,6 +707,11 @@ async function toggleMic(){
 //  VOICE INPUT HANDLER
 // ═══════════════════════════════════════════
 function handleVoiceInput(text){
+  // If we're currently expecting an answer for a puzzle piece, handle it first
+  if(expectingPieceAnswer!==null && !placed[expectingPieceAnswer]){
+    handlePieceVoiceAnswer(text);
+    return;
+  }
   // Global commands
   if(text.includes('mulai')||text.includes('start')){
     if(!started){startGame();return;}
@@ -886,8 +892,10 @@ function readNext(){
     pc.scrollIntoView({behavior:'smooth',block:'nearest'});
   }
   const p=PIECES.find(x=>x.id===pid);
-    const msg=`Kepingan nomor ${pid}. Soal: ${p.hint} sama dengan berapa? Sekarang pasang kepingan nomor ${pid} ke posisi ${pid} di papan puzzle! Kamu bisa ketuk kepingan lalu ketuk posisi di papan, atau ucapkan "pasang".`;
-  say(msg,null);
+  const msg=`Kepingan nomor ${pid}. Soal: ${p.hint} sama dengan berapa?`;
+  // set expecting answer for this piece; when detected correct, we will prompt to place
+  expectingPieceAnswer=pid;
+  setMsg(msg);
   if(readIdx>=READ_ORDER.length){
     setTimeout(()=>document.getElementById('nextBtn').disabled=true,500);
   }
@@ -985,6 +993,28 @@ function startVoiceAnswer(qNum){
   currentQuizQ=idx;
   document.getElementById(`qvi-${qNum}`).classList.add('show');
     setMsg('Dengarkan suaramu... Ucapkan jawabanmu!');
+}
+
+function handlePieceVoiceAnswer(text){
+  if(expectingPieceAnswer===null) return;
+  const pid=expectingPieceAnswer;
+  const p=PIECES.find(x=>x.id===pid);
+  if(!p) return;
+  const norm=text.replace(/\./g,'').replace(/,/g,'').toLowerCase();
+  const normAns=p.a.toString().toLowerCase().replace(/[^0-9a-z]/g,'');
+  const normNorm=norm.replace(/[^0-9a-z]/g,'');
+  if(normNorm.includes(normAns)||normAns===normNorm){
+    expectingPieceAnswer=null;
+    setMsg(`Jawaban untuk kepingan ${pid} benar — sekarang pasang kepingan nomor ${pid} ke posisi ${pid}.`);
+    playBeep(1000,0.08,'triangle');
+    curHighlight=pid;
+    const pc=document.getElementById(`pc-${pid}`);
+    if(pc) pc.classList.add('current');
+    toast('✅ Jawaban benar! Pasang keping sekarang.',2000);
+  } else {
+    setMsg('Jawaban belum tepat, coba lagi.');
+    playBeep(300,0.06,'sawtooth');
+  }
 }
 
 function handleQuizVoiceAnswer(text){
