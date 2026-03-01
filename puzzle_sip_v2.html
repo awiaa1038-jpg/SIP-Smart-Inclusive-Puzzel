@@ -1295,6 +1295,12 @@ function toggleMute(){
 function toast(msg,dur=2500){
   const t=document.getElementById('toast');
   t.textContent=msg;t.classList.add('show');
+  // speak toast message as well, unless muted
+  if(!muted){
+    // remove icons for speech clarity
+    const spoken=msg.replace(/[✅❌]/g,'').trim();
+    speak(spoken);
+  }
   clearTimeout(t._t);
   t._t=setTimeout(()=>t.classList.remove('show'),dur);
 }
