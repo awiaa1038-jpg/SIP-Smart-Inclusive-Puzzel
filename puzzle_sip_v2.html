@@ -665,8 +665,16 @@ buildStars();
 // ═══════════════════════════════════════════
 //  SPEECH SYNTHESIS
 // ═══════════════════════════════════════════
+// flag used to remember last AI speech so we can ignore it in recognition
+let lastSpokenText='';
 function speak(txt, onDone){
+  lastSpokenText = txt.trim().toLowerCase();
   if(muted){if(onDone)onDone();return;}
+  // temporarily pause recognition to avoid feedback loop
+  if(recognition && micOn){
+    try{recognition.stop();}catch(e){}
+    recActive=false;
+  }
   synth.cancel();
   const u=new SpeechSynthesisUtterance(txt);
   u.lang='id-ID';u.rate=1.2;u.pitch=1.0;
@@ -680,6 +688,11 @@ function speak(txt, onDone){
   u.onend=u.onerror=()=>{
     document.getElementById('aiAv').classList.remove('talking');
     document.getElementById('waves').classList.remove('active');
+    // resume recognition if it was active before
+    if(recognition && micOn){
+      recActive=true;
+      try{recognition.start();}catch(e){}
+    }
     if(onDone)onDone();
   };
   synth.speak(u);
@@ -710,7 +723,14 @@ function setupRecognition(){
     }
     const disp=final||interim;
     document.getElementById('voiceTranscript').textContent=disp;
-    // If interim contains clear short commands, act early for responsiveness
+    // normalize
+    const fLow=final.trim().toLowerCase();
+    // ignore if recognition captured our own last spoken words
+    if(fLow && lastSpokenText && fLow.includes(lastSpokenText)){
+      // clear final to avoid processing
+      final='';
+    }
+    // interim early commands
     if(interim){
       const iLow=interim.trim().toLowerCase();
       if(iLow.length>2 && (iLow.includes('mulai')||iLow.includes('start')||iLow.includes('selanjutnya')||iLow.includes('next')||iLow.includes('pasang')||iLow.includes('reset')||iLow.includes('buka soal')||iLow.includes('quiz'))){
