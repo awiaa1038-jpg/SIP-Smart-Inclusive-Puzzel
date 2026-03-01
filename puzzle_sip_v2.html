@@ -886,7 +886,7 @@ function readNext(){
     pc.scrollIntoView({behavior:'smooth',block:'nearest'});
   }
   const p=PIECES.find(x=>x.id===pid);
-  const msg=`Kepingan nomor ${pid}. Soal: ${p.hint} sama dengan berapa? Jawabannya adalah ${p.a}. Sekarang pasang kepingan nomor ${pid} ke posisi ${pid} di papan puzzle! Kamu bisa ketuk kepingan lalu ketuk posisi di papan, atau ucapkan "pasang".`;
+    const msg=`Kepingan nomor ${pid}. Soal: ${p.hint} sama dengan berapa? Sekarang pasang kepingan nomor ${pid} ke posisi ${pid} di papan puzzle! Kamu bisa ketuk kepingan lalu ketuk posisi di papan, atau ucapkan "pasang".`;
   say(msg,null);
   if(readIdx>=READ_ORDER.length){
     setTimeout(()=>document.getElementById('nextBtn').disabled=true,500);
@@ -984,7 +984,7 @@ function startVoiceAnswer(qNum){
   const idx=POST_QS.findIndex(q=>q.n===qNum);
   currentQuizQ=idx;
   document.getElementById(`qvi-${qNum}`).classList.add('show');
-  say(`Soal ${qNum}: ${POST_QS[idx].text} Sekarang, ucapkan jawabanmu!`,null);
+    setMsg('Dengarkan suaramu... Ucapkan jawabanmu!');
 }
 
 function handleQuizVoiceAnswer(text){
