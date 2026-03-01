@@ -633,7 +633,9 @@ const POST_QS = [
 //  STATE
 // ═══════════════════════════════════════════
 // global state
+// global state
 let started=false, readIdx=0, placed={}, gameScore=0;
+let greetedWelcome=false; // prevent repeating the same welcome speech
 // fuzzy match threshold (0-1) used for interpreting voice answers; lower makes it more permissive
 const FUZZY_THRESHOLD = 0.75; // adjust if recognition too strict or too loose
 let muted=false, micOn=false;
@@ -959,7 +961,11 @@ function startGame(){
   document.getElementById('startBtn').disabled=true;
   document.getElementById('nextBtn').disabled=false;
   updateUI();
-  say('Selamat datang di Smart Inclusive Puzzle! Aku SIPA siap memandu kamu. Aku akan membacakan soal untuk setiap kepingan puzzle secara acak. Dengarkan, lalu pasang kepingannya ke papan! Ketuk "Soal Berikutnya" atau katakan "selanjutnya" untuk mulai!',null);
+  if(!greetedWelcome){
+    say('Selamat datang di Smart Inclusive Puzzle! Aku SIPA siap memandu kamu. Aku akan membacakan soal untuk setiap kepingan puzzle secara acak. Dengarkan, lalu pasang kepingannya ke papan! Ketuk "Soal Berikutnya" atau katakan "selanjutnya" untuk mulai!',null);
+  } else {
+    say('Ayo mulai! Aku akan membacakan soal kepingan pertama.',null);
+  }
 }
 
 function readNext(){
@@ -980,7 +986,7 @@ function readNext(){
     pc.scrollIntoView({behavior:'smooth',block:'nearest'});
   }
   const p=PIECES.find(x=>x.id===pid);
-  const msg=`Kepingan nomor ${pid}. Soal: ${p.hint} sama dengan berapa?`;
+  const msg=`Lanjut ke kepingan selanjutnya. Kepingan nomor ${pid}. Soal: ${p.hint} sama dengan berapa?`;
   // set expecting answer for this piece; when detected correct, we will prompt to place
   expectingPieceAnswer=pid;
   say(msg, null);
@@ -1387,6 +1393,7 @@ async function enterApp(){
   // Greeting
   setTimeout(()=>{
     say('Halo! Selamat datang di Smart Inclusive Puzzle! Aku SIPA, asisten AI kamu. Aku akan membantumu belajar matematika sambil main puzzle seru. Klik mulai atau katakan mulai untuk memulai permainan!',null);
+    greetedWelcome=true;
   },500);
 }
 
